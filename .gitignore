@@ -1,17 +1,3 @@
-# Dependencies
-node_modules/
-.npm
-
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Build output
-dist/
-build/
-coverage/
-
 # Logs
 logs
 *.log
@@ -21,23 +7,19 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# IDE - VSCode
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
 .vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
 !.vscode/extensions.json
-*.code-workspace
-
-# IDE - WebStorm/IntelliJ
-.idea/
-
-# macOS specific
+.idea
 .DS_Store
-.AppleDouble
-.LSOverride
-
-# Misc
-*.pem
-.cache
-.temp
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.env
