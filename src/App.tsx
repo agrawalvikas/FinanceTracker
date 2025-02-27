@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Navigation } from './components/Navigation';
-import { Dashboard } from './pages/Dashboard';
+import Dashboard from './pages/Dashboard';
 import { ExpenseForm } from './pages/ExpenseForm';
 import { IncomeForm } from './pages/IncomeForm';
 import { Summary } from './pages/Summary';
