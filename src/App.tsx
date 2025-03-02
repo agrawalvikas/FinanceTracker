@@ -8,6 +8,8 @@ import { Summary } from './pages/Summary';
 import { Transactions } from './pages/Transactions';
 import { Login } from './pages/Login';
 import { AuthProvider, useAuth } from './lib/auth';
+import { GoogleAuthCallback } from './components/GoogleAuthCallback';
+import { Error } from './pages/Error';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -45,6 +47,8 @@ function App() {
           <Route path="/add-income" element={<PrivateRoute><IncomeForm /></PrivateRoute>} />
           <Route path="/summary" element={<PrivateRoute><Summary /></PrivateRoute>} />
           <Route path="/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
+          <Route path="/auth/callback" element={<GoogleAuthCallback />} />
+          <Route path="/error" element={<Error />} />
         </Routes>
       </Router>
     </AuthProvider>
