@@ -1,10 +1,18 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import session from 'express-session';
 import cors from 'cors';
 import sheetsRouter from './routes/google-sheets';
 
 const app = express();
+import dotenv from 'dotenv';
+dotenv.config();
+
 const port = process.env.PORT || 3001;
+const sessionSecret = process.env.SESSION_SECRET;
+
+if (!sessionSecret) {
+  throw new Error('SESSION_SECRET is not defined in the environment variables.');
+}
 
 app.use(cors({
   origin: 'http://localhost:5173',
@@ -15,7 +23,7 @@ app.use(express.json());
 
 // Session middleware with proper typing
 const sessionMiddleware = session({
-  secret: 'your-secret-key',
+  secret: sessionSecret,
   resave: true,
   saveUninitialized: true,
   cookie: {
@@ -28,65 +36,14 @@ const sessionMiddleware = session({
   name: 'google.session'
 });
 
-// Debug middleware with proper typing
-app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log('Incoming request session:', {
-    url: req.url,
-    hasSession: !!(req as any).session,
-    sessionID: (req as any).sessionID
-  });
-  next();
-});
-
 app.use(sessionMiddleware);
 
-// Post-session middleware with proper typing
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const originalEnd = res.end;
-  const originalJson = res.json;
-
-  // Override json method
-  res.json = function(body) {
-    console.log('Response session state:', {
-      url: req.url,
-      hasTokens: !!(req as any).session?.tokens,
-      sessionID: (req as any).sessionID
-    });
-    return originalJson.call(this, body);
-  };
-
-  // Override end method with correct typing
-  res.end = function(
-    this: Response,
-    chunk: any,
-    encoding?: BufferEncoding,
-    callback?: () => void
-  ) {
-    console.log('Response session state:', {
-      url: req.url,
-      hasTokens: !!(req as any).session?.tokens,
-      sessionID: (req as any).sessionID
-    });
-    
-    if (typeof chunk === 'function') {
-      callback = chunk;
-      chunk = null;
-      encoding = undefined;
-    } else if (typeof encoding === 'function') {
-      callback = encoding;
-      encoding = undefined;
-    }
-
-    return originalEnd.call(this, chunk, encoding as BufferEncoding, callback);
-  } as any; // Cast to any to avoid TypeScript overload issues
-
-  next();
-});
+import { Credentials } from 'google-auth-library';
 
 // Declare session types
 declare module 'express-session' {
   interface SessionData {
-    tokens: any;
+    tokens: Credentials;
   }
 }
 

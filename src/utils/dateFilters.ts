@@ -1,6 +1,7 @@
 import { subDays, subMonths, subYears, isAfter } from 'date-fns';
+import { Transaction } from '../types';
 
-export function filterTransactionsByDate(transactions: any[], range: string) {
+export function filterTransactionsByDate(transactions: Transaction[], range: string) {
   const now = new Date();
   let cutoffDate;
 
