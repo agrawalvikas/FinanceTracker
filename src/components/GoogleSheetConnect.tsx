@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { supabase } from '../lib/supabaseClient';
 
 const API_URL = 'http://localhost:3001/api/sheets';
 
@@ -142,11 +143,12 @@ export function GoogleSheetConnect() {
 
   const handleImport = async (data: typeof previewData) => {
     if (!data || !selectedFile) return;
-    
+
     try {
+      // 1. Fetch mapped transactions from the backend
       const response = await fetch(`${API_URL}/import-sheet`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
@@ -155,7 +157,6 @@ export function GoogleSheetConnect() {
           sheetName: data.selectedSheet,
           mappings: {
             date: data.headers.indexOf('Date'),
-            type: data.headers.indexOf('Type'),
             amount: data.headers.indexOf('Amount'),
             category: data.headers.indexOf('Category'),
             account: data.headers.indexOf('Account'),
@@ -165,17 +166,54 @@ export function GoogleSheetConnect() {
       });
 
       const result = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to import sheet');
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to fetch data from sheet');
       }
 
-      // Show success message and close preview
-      alert(`Successfully imported ${result.count} transactions`);
+      // 2. Get the current user from Supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated. Please log in again.');
+      }
+
+      // 3. Add user_id to each transaction
+      type BackendTransaction = {
+        date: string;
+        type: 'income' | 'expense';
+        amount: number;
+        category: string;
+        source: string;
+        description: string;
+      };
+
+      const transactionsToInsert = (result.transactions as BackendTransaction[]).map((tx) => ({
+        ...tx,
+        user_id: user.id
+      }));
+
+      if (transactionsToInsert.length === 0) {
+        alert('No valid transactions to import.');
+        return;
+      }
+
+      // 4. Batch insert into Supabase
+      const { error: insertError } = await supabase
+        .from('transactions')
+        .insert(transactionsToInsert);
+
+      if (insertError) {
+        console.error('Supabase insert error:', insertError);
+        throw new Error('Failed to save transactions to the database.');
+      }
+
+      // 5. Show success message and close preview
+      alert(`Successfully imported ${transactionsToInsert.length} transactions`);
       setPreviewData(null);
+
     } catch (error) {
       console.error('Error importing sheet:', error);
-      alert('Failed to import transactions');
+      alert(error instanceof Error ? error.message : 'An unknown error occurred during import.');
     }
   };
 

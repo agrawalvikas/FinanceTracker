@@ -53,7 +53,7 @@ export function GoogleAuthCallback() {
     };
 
     handleCallback();
-  }, []); // Run only once when component mounts
+  }, [navigate, searchParams]);
 
   return (
     <div className="flex items-center justify-center min-h-screen">

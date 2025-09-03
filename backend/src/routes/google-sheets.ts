@@ -3,9 +3,11 @@ import { google } from 'googleapis';
 import dotenv from 'dotenv';
 import { Session } from 'express-session';
 
+import { Credentials } from 'google-auth-library';
+
 // Extend the Session type
 interface CustomSession extends Session {
-  tokens?: any;
+  tokens?: Credentials;
 }
 
 // Extend the Request type
@@ -16,9 +18,6 @@ interface CustomRequest extends Request {
 const router = express.Router();
 dotenv.config();
 
-// Add debug logs
-console.log('Client ID:', process.env.GOOGLE_CLIENT_ID);
-console.log('Redirect URI:', process.env.GOOGLE_REDIRECT_URI);
 
 // At the top of the file
 const REDIRECT_URI = 'http://localhost:5173/auth/callback';  // Frontend URL
@@ -45,14 +44,6 @@ router.get('/auth-url', (req, res) => {
 
 router.get('/callback', async (req: CustomRequest, res: Response) => {
   const { code } = req.query;
-  
-  console.log('1. Callback received with code:', !!code);
-  console.log('2. Session details:', {
-    exists: !!req.session,
-    id: req.session.id,
-    currentTokens: !!req.session.tokens,
-    sessionObject: req.session
-  });
 
   if (!code) {
     return res.status(400).json({ error: 'No code provided' });
@@ -60,7 +51,6 @@ router.get('/callback', async (req: CustomRequest, res: Response) => {
 
   try {
     const { tokens: newTokens } = await oauth2Client.getToken(code as string);
-    console.log('3. Got new tokens from Google');
     
     // Store tokens in session
     req.session.tokens = newTokens;
@@ -69,24 +59,11 @@ router.get('/callback', async (req: CustomRequest, res: Response) => {
     await new Promise<void>((resolve, reject) => {
       req.session.save((err) => {
         if (err) {
-          console.error('4. Error saving session:', err);
           reject(err);
         } else {
-          console.log('4. Session saved successfully');
           resolve();
         }
       });
-    });
-
-    console.log('5. Final session state:', {
-      exists: !!req.session,
-      id: req.session.id,
-      hasTokens: !!req.session.tokens,
-      tokenDetails: {
-        hasAccessToken: !!newTokens.access_token,
-        hasRefreshToken: !!newTokens.refresh_token,
-        expiryDate: newTokens.expiry_date
-      }
     });
 
     const client = getAuthenticatedClient(newTokens);
@@ -113,7 +90,7 @@ router.post('/sync-sheet', async (req, res) => {
   const { sheetId } = req.body;
   try {
     const sheets = google.sheets('v4');
-    const response = await sheets.spreadsheets.values.get({
+    await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
       range: 'A2:G',
     });
@@ -131,32 +108,18 @@ router.post('/sync-sheet', async (req, res) => {
 router.get('/sheets', async (req: CustomRequest, res: Response) => {
   const { fileId } = req.query;
   
-  console.log('1. Request received for fileId:', fileId);
-  console.log('2. Session:', {
-    exists: !!req.session,
-    id: req.session.id,
-    tokens: !!req.session.tokens
-  });
-  
   try {
     if (!req.session.tokens) {
-      console.log('3. No tokens found in session');
       throw new Error('Not authenticated');
     }
 
     const oauth2Client = getAuthenticatedClient(req.session.tokens);
     
-    console.log('4. Making request to Google Sheets API');
     const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
     const response = await sheets.spreadsheets.get({
       spreadsheetId: fileId as string,
     });
     
-    console.log('6. Got response from Google:', {
-      success: true,
-      sheetCount: response.data.sheets?.length
-    });
-
     const sheetsList = response.data.sheets?.map(sheet => ({
       id: sheet.properties?.sheetId,
       name: sheet.properties?.title,
@@ -207,7 +170,7 @@ router.get('/list-sheets', async (req, res) => {
 });
 
 // Move OAuth client creation to a helper function
-function getAuthenticatedClient(tokens: any) {
+function getAuthenticatedClient(tokens: Credentials) {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
@@ -219,15 +182,8 @@ function getAuthenticatedClient(tokens: any) {
 
 // Update the preview-sheet endpoint
 router.post('/preview-sheet', async (req: CustomRequest, res: Response) => {
-  const { fileId, sheetId, sheetName } = req.body;
+  const { fileId, sheetName } = req.body;
   
-  console.log('Preview request for:', {
-    fileId,
-    sheetId,
-    sheetName,
-    hasTokens: !!req.session.tokens
-  });
-
   try {
     if (!req.session.tokens) {
       throw new Error('Not authenticated');
@@ -239,17 +195,9 @@ router.post('/preview-sheet', async (req: CustomRequest, res: Response) => {
     // Use sheet name in range if provided
     const range = sheetName ? `'${sheetName}'!A1:F` : 'A1:F';
     
-    console.log('Fetching sheet data with range:', range);
-    
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: fileId,
       range
-    });
-
-    console.log('Got sheet data:', {
-      sheetName,
-      rowCount: response.data.values?.length || 0,
-      hasHeaders: !!response.data.values?.[0]
     });
 
     const headers = response.data.values?.[0] || [];
@@ -304,35 +252,20 @@ router.post('/import-sheet', async (req: CustomRequest, res: Response) => {
       
       return {
         date: row[mappings.date],
-        // Determine type based on amount sign
-        type: amount < 0 ? 'Income' : 'Expense',
+        // Determine type based on amount sign (positive = income, negative = expense)
+        type: amount > 0 ? 'income' : 'expense',
         // Store absolute amount value
         amount: Math.abs(amount),
         category: row[mappings.category],
         source: row[mappings.account], // Map account column to source
         description: row[mappings.description]
       };
-    });
+    }).filter(t => t.date && t.amount); // Filter out any invalid rows
 
-    console.log('Mapped transactions:', {
-      total: transactions.length,
-      sample: transactions.slice(0, 2),
-      typeBreakdown: {
-        income: transactions.filter(t => t.type === 'Income').length,
-        expense: transactions.filter(t => t.type === 'Expense').length
-      }
-    });
-
-    // TODO: Insert transactions into your database
-    // const result = await db.insertTransactions(transactions);
-
+    // Return the mapped transactions to the frontend for insertion
     res.json({ 
       success: true,
-      count: transactions.length,
-      summary: {
-        income: transactions.filter(t => t.type === 'Income').length,
-        expense: transactions.filter(t => t.type === 'Expense').length
-      }
+      transactions: transactions
     });
   } catch (error) {
     console.error('Error importing sheet:', error);
